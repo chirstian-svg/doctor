@@ -31,21 +31,22 @@ raw <- readxl::read_excel(excel_path) |> janitor::clean_names()
 col_map <- c(
   # sample sizes
   n_clip = "number_of_patients_assessed_clip_intervention",
-  n_no_clip = "no_of_patients_assessed_control_no_clip",
+  n_no_clip = "number_of_patients_assessed_control_no_clip",
 
-  # outcomes (events)
-  delayed_bleeding_no_clip = "no_of_delayed_bleendings_control_no_clip",
-  perforation_no_clip = "no_of_perforation_control_no_clip",
-  post_esd_syndrome_no_clip = "no_of_post_esd_electrocoagulation_syndrome_control_no_clip",
+  # outcomes (events) — control/no-clip side
+  delayed_bleeding_no_clip = "no_of_delayed_bleendings_control_no_clip_12",
+  perforation_no_clip = "no_of_perforation_control_no_clip_13",
+  post_esd_syndrome_no_clip = "no_of_post_esd_electrocoagulation_syndrome_control_no_clip_14",
 
-  delayed_bleeding_clip = "no_of_delayed_bleendings_clip_intervention",
-  perforation_clip = "no_of_perforation_clip_intervention",
-  post_esd_syndrome_clip = "no_of_post_esd_electrocoagulation_syndrome_clip_intervention",
+  # outcomes (events) — clip/intervention side (duplicate-named columns, suffixed _32/_33/_34)
+  delayed_bleeding_clip = "no_of_delayed_bleendings_control_no_clip_32",
+  perforation_clip = "no_of_perforation_control_no_clip_33",
+  post_esd_syndrome_clip = "no_of_post_esd_electrocoagulation_syndrome_control_no_clip_34",
 
   # moderators / covariates
-  antiplatelet_clip = "no_treated_with_antiplate_medications_cclip_intervention",
+  antiplatelet_clip = "no_percent_treated_with_antiplate_medications_cclip_intervention",
   anticoag_clip = "no_of_patient_treated_with_anticuagulation_clip_intervention",
-  avg_size = "average_size",
+  avg_size = "average_size_20",
 
   technique_label = "technique",
   technique_code = "techinque_1_esd_2_emr_3_esd_emr"

@@ -23,7 +23,7 @@ parse_numeric_loose <- function(x) {
   suppressWarnings(as.numeric(x_chr))
 }
 
-excel_path <- file.path("..", "data.xlsx")
+excel_path <- file.path(dirname(dirname(getwd())), "data.xlsx")
 raw <- readxl::read_excel(excel_path) |> janitor::clean_names()
 
 # ---- Column mapping (edit this if Excel headers change) ----

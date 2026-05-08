@@ -94,8 +94,10 @@ dat <- dat |>
 # Add a stable study id if not present (Excel seems to be one row per study)
 dat <- dat |> mutate(study_id = row_number())
 
-saveRDS(dat, file = "outputs/tables/clean_data.rds")
-write.csv(dat, file = "outputs/tables/clean_data.csv", row.names = FALSE)
+out_dir <- file.path(dirname(getwd()), "outputs", "tables")
+dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
+saveRDS(dat, file = file.path(out_dir, "clean_data.rds"))
+write.csv(dat, file = file.path(out_dir, "clean_data.csv"), row.names = FALSE)
 
 message("Saved cleaned data to outputs/tables/clean_data.{rds,csv}")
 

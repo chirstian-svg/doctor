@@ -1,7 +1,9 @@
 library(dplyr)
 library(ggplot2)
 
-dat <- readRDS("outputs/tables/clean_data.rds")
+tbl_dir <- file.path(dirname(getwd()), "outputs", "tables")
+fig_dir <- file.path(dirname(getwd()), "outputs", "figures")
+dat <- readRDS(file.path(tbl_dir, "clean_data.rds"))
 
 # --- ITT / attributable risk style calculations (study-level) ---
 # Using delayed bleeding as default; extend similarly for other outcomes if needed.
@@ -25,7 +27,7 @@ if (all(c("delayed_bleeding_clip", "delayed_bleeding_no_clip", "n_clip", "n_no_c
       rr = risk_clip / risk_no_clip
     )
 
-  write.csv(out, "outputs/tables/itt_attributable_risk_delayed_bleeding.csv", row.names = FALSE)
+  write.csv(out, file.path(tbl_dir, "itt_attributable_risk_delayed_bleeding.csv"), row.names = FALSE)
 
   p <- out |>
     filter(!is.na(attributable_risk)) |>
@@ -39,7 +41,7 @@ if (all(c("delayed_bleeding_clip", "delayed_bleeding_no_clip", "n_clip", "n_no_c
     ) +
     theme_minimal(base_size = 12)
 
-  ggsave("outputs/figures/attributable_risk_delayed_bleeding.png", p, width = 8, height = 5, dpi = 200)
+  ggsave(file.path(fig_dir, "attributable_risk_delayed_bleeding.png"), p, width = 8, height = 5, dpi = 200)
 }
 
 # NOTE: “Non-permitted-to-treat” was requested in the call notes but is not a standard label.

@@ -2,7 +2,9 @@ library(dplyr)
 library(ggplot2)
 library(brms)
 
-es <- readRDS("outputs/tables/effect_sizes_or.rds")
+tbl_dir <- file.path(dirname(getwd()), "outputs", "tables")
+fig_dir <- file.path(dirname(getwd()), "outputs", "figures")
+es <- readRDS(file.path(tbl_dir, "effect_sizes_or.rds"))
 
 # Duplication / overweighting rule placeholder:
 # If a single paper contributes multiple technique arms, ensure it is counted once for "overall".
@@ -36,7 +38,7 @@ fit_meta <- function(df, model_name, weakly_informative_tau = TRUE) {
     warmup = 1000,
     seed = 123,
     backend = "cmdstanr",
-    file = file.path("outputs", "tables", paste0("brms_", model_name))
+    file = file.path(tbl_dir, paste0("brms_", model_name))
   )
 }
 
@@ -65,7 +67,7 @@ for (oc in outcomes) {
   plot_forest(
     df_oc,
     title = paste0("Forest plot (approx.) — ", oc, " — Overall"),
-    file = file.path("outputs/figures", paste0("forest_", oc, "_overall.png"))
+    file = file.path(fig_dir, paste0("forest_", oc, "_overall.png"))
   )
 
   # Subgroups
@@ -82,7 +84,7 @@ for (oc in outcomes) {
     plot_forest(
       df_t,
       title = paste0("Forest plot (approx.) — ", oc, " — ", tech),
-      file = file.path("outputs/figures", paste0("forest_", oc, "_", gsub("[^A-Za-z0-9]+", "_", tech), ".png"))
+      file = file.path(fig_dir, paste0("forest_", oc, "_", gsub("[^A-Za-z0-9]+", "_", tech), ".png"))
     )
   }
 }

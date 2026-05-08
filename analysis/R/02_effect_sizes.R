@@ -1,7 +1,8 @@
 library(dplyr)
 library(metafor)
 
-dat <- readRDS("outputs/tables/clean_data.rds")
+out_dir  <- file.path(dirname(getwd()), "outputs", "tables")
+dat <- readRDS(file.path(out_dir, "clean_data.rds"))
 
 require_cols <- function(cols) {
   missing <- setdiff(cols, names(dat))
@@ -64,8 +65,8 @@ es_post_esd <- make_es("post_esd_syndrome")
 
 es_all <- bind_rows(es_delayed, es_perforation, es_post_esd)
 
-saveRDS(es_all, "outputs/tables/effect_sizes_or.rds")
-write.csv(es_all, "outputs/tables/effect_sizes_or.csv", row.names = FALSE)
+saveRDS(es_all, file.path(out_dir, "effect_sizes_or.rds"))
+write.csv(es_all, file.path(out_dir, "effect_sizes_or.csv"), row.names = FALSE)
 
 message("Saved effect sizes to outputs/tables/effect_sizes_or.{rds,csv}")
 

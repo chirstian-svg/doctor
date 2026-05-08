@@ -2,8 +2,10 @@ library(dplyr)
 library(ggplot2)
 library(brms)
 
-es <- readRDS("outputs/tables/effect_sizes_or.rds")
-dat <- readRDS("outputs/tables/clean_data.rds")
+tbl_dir <- file.path(dirname(getwd()), "outputs", "tables")
+fig_dir <- file.path(dirname(getwd()), "outputs", "figures")
+es  <- readRDS(file.path(tbl_dir, "effect_sizes_or.rds"))
+dat <- readRDS(file.path(tbl_dir, "clean_data.rds"))
 
 # Join moderators
 mod <- dat |>
@@ -38,7 +40,7 @@ fit_tech <- brm(
   warmup = 1000,
   seed = 123,
   backend = "cmdstanr",
-  file = file.path("outputs", "tables", "brms_meta_reg_technique")
+  file = file.path(tbl_dir, "brms_meta_reg_technique")
 )
 
 # Size (+ antiplatelet) moderators
@@ -63,7 +65,7 @@ fit_size <- brm(
   warmup = 1000,
   seed = 123,
   backend = "cmdstanr",
-  file = file.path("outputs", "tables", "brms_meta_reg_size_antiplatelet")
+  file = file.path(tbl_dir, "brms_meta_reg_size_antiplatelet")
 )
 
 # Bubble plots (approximate): yi vs moderator with size by precision
@@ -78,9 +80,9 @@ bubble <- function(d, x, xlab, file) {
   ggsave(file, width = 8, height = 5, dpi = 200)
 }
 
-bubble(df_tech, "technique_code", "Technique (1=ESD, 2=EMR)", "outputs/figures/bubble_technique.png")
-bubble(df_size |> filter(!is.na(avg_size)), "avg_size", "Average polyp size (mm)", "outputs/figures/bubble_size.png")
-bubble(df_size |> filter(!is.na(antiplatelet_rate)), "antiplatelet_rate", "Antiplatelet rate (clip arm)", "outputs/figures/bubble_antiplatelet_rate.png")
+bubble(df_tech, "technique_code", "Technique (1=ESD, 2=EMR)", file.path(fig_dir, "bubble_technique.png"))
+bubble(df_size |> filter(!is.na(avg_size)), "avg_size", "Average polyp size (mm)", file.path(fig_dir, "bubble_size.png"))
+bubble(df_size |> filter(!is.na(antiplatelet_rate)), "antiplatelet_rate", "Antiplatelet rate (clip arm)", file.path(fig_dir, "bubble_antiplatelet_rate.png"))
 
 message("Meta-regressions saved under outputs/tables/. Bubble plots saved to outputs/figures/.")
 

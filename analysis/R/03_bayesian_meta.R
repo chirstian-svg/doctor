@@ -280,50 +280,111 @@ for (oc in outcomes) {
     file   = file.path(fig_dir, paste0("forest_", oc, "_combined.png"))
   )
 
-  # Individual subgroup plots (separate files, same style)
-  plot_forest_simple <- function(df, title, file) {
+  # Individual subgroup plots (separate files, with pooled diamond)
+  plot_forest_simple <- function(df, fit, title, file) {
     op <- pretty_outcome(unique(df$outcome))
-    df |>
+
+    # study rows
+    study_rows <- df |>
       mutate(
-        or    = exp(yi), lo = exp(yi - 1.96 * sei), hi = exp(yi + 1.96 * sei),
-        label = if ("study_label" %in% names(df)) study_label else paste0("Study ", study_id)
+        or    = exp(yi),
+        lo    = exp(yi - 1.96 * sei),
+        hi    = exp(yi + 1.96 * sei),
+        label = if ("study_label" %in% names(df)) study_label else paste0("Study ", study_id),
+        row_type = "study"
       ) |>
-      ggplot(aes(y = reorder(label, yi), x = or, color = technique, shape = technique)) +
+      arrange(yi)
+
+    # pooled row from model
+    pooled_row <- NULL
+    if (!is.null(fit)) {
+      p <- pooled_or(fit)
+      tech_val <- unique(df$technique)
+      pooled_row <- tibble(
+        or       = p$or_med,
+        lo       = p$or_lo,
+        hi       = p$or_hi,
+        label    = paste0("Pooled ", paste(tech_val, collapse = "/")),
+        technique = tech_val[1],
+        row_type = "pooled"
+      )
+    }
+
+    plot_df <- bind_rows(study_rows, pooled_row) |>
+      mutate(label = factor(label, levels = c(
+        if (!is.null(pooled_row)) pooled_row$label,
+        rev(study_rows$label)
+      )))
+
+    ggplot(plot_df, aes(y = label, x = or, color = technique)) +
       geom_vline(xintercept = 1, linetype = "dashed", color = "grey50", linewidth = 0.6) +
-      geom_errorbar(aes(xmin = lo, xmax = hi), width = 0.2, linewidth = 0.6) +
-      geom_point(size = 3) +
-      scale_x_log10() +
-      scale_color_manual(name = "Technique",
-        values = c("ESD" = "#E64B35", "EMR" = "#4DBBD5", "ESD+EMR" = "#00A087"), drop = FALSE) +
-      scale_shape_manual(name = "Technique",
-        values = c("ESD" = 16, "EMR" = 17, "ESD+EMR" = 15), drop = FALSE) +
+      # CI bars
+      geom_errorbar(aes(xmin = lo, xmax = hi,
+                        linewidth = ifelse(row_type == "pooled", 1.0, 0.6)),
+                    width = 0.25, show.legend = FALSE) +
+      # study squares
+      geom_point(data = ~ filter(., row_type == "study"),
+                 aes(shape = technique), size = 3) +
+      # pooled diamond
+      geom_point(data = ~ filter(., row_type == "pooled"),
+                 shape = 18, size = 6) +
+      # CI text label on pooled row
+      geom_text(data = ~ filter(., row_type == "pooled"),
+                aes(label = paste0(round(or, 2), " (", round(lo, 2), "\u2013", round(hi, 2), ")")),
+                hjust = -0.15, size = 3, color = "grey20") +
+      scale_x_log10(
+        breaks = c(0.1, 0.2, 0.5, 1, 2, 5, 10),
+        labels = c("0.1", "0.2", "0.5", "1", "2", "5", "10")
+      ) +
+      scale_linewidth_identity() +
+      scale_color_manual(
+        name   = "Technique",
+        values = c("ESD" = "#E64B35", "EMR" = "#4DBBD5", "ESD+EMR" = "#00A087"),
+        drop   = FALSE
+      ) +
+      scale_shape_manual(
+        name   = "Technique",
+        values = c("ESD" = 15, "EMR" = 15, "ESD+EMR" = 15),
+        drop   = FALSE
+      ) +
       labs(
         title    = title,
         subtitle = paste0("Outcome: ", op, "  |  Effect measure: Odds Ratio (log scale)"),
-        x        = "Odds Ratio (log scale)  [OR < 1 favours Clip]",
+        x        = "Odds Ratio (95% CrI)  [OR < 1 favours Clip]",
         y        = "Study (First Author, Year)",
-        caption  = "Points show OR; horizontal lines show 95% CI.\nDashed line at OR = 1 indicates no effect."
+        caption  = paste0(
+          "Squares = study-level OR; horizontal lines = 95% CI.\n",
+          "\u25c6 Diamond = Bayesian pooled estimate with 95% credible interval.\n",
+          "Dashed line at OR = 1 indicates no effect."
+        )
       ) +
       theme_minimal(base_size = 12) +
       theme(
-        plot.title = element_text(face = "bold", size = 13),
-        plot.subtitle = element_text(size = 10, color = "grey40"),
-        plot.caption  = element_text(size = 8, color = "grey50"),
-        legend.position = "bottom", legend.title = element_text(face = "bold")
+        plot.title      = element_text(face = "bold", size = 13),
+        plot.subtitle   = element_text(size = 10, color = "grey40"),
+        plot.caption    = element_text(size = 8,  color = "grey50", hjust = 0),
+        legend.position = "bottom",
+        legend.title    = element_text(face = "bold"),
+        axis.text.y     = element_text(
+          face = ifelse(levels(plot_df$label) %in% (if (!is.null(pooled_row)) pooled_row$label else ""), "bold", "plain")
+        )
       )
-    ggsave(filename = file, width = 9, height = max(5, nrow(df) * 0.5 + 2), dpi = 200)
+
+    ggsave(filename = file, width = 9,
+           height = max(5, nrow(plot_df) * 0.55 + 2), dpi = 200)
   }
 
-  plot_forest_simple(df_oc,
+  plot_forest_simple(df_oc, fits[["overall"]],
     title = paste0("Clip vs No Clip \u2014 ", gsub("_", " ", tools::toTitleCase(oc)), " \u2014 All Studies"),
     file  = file.path(fig_dir, paste0("forest_", oc, "_overall.png")))
 
   for (tech in sort(unique(df_oc$technique))) {
     df_t <- df_oc |> filter(technique == tech)
     if (nrow(df_t) < 2) next
-    plot_forest_simple(df_t,
+    tech_key <- gsub("[^A-Za-z0-9]+", "_", tech)
+    plot_forest_simple(df_t, fits[[tech_key]],
       title = paste0("Clip vs No Clip \u2014 ", gsub("_", " ", tools::toTitleCase(oc)), " \u2014 ", tech, " Subgroup"),
-      file  = file.path(fig_dir, paste0("forest_", oc, "_", gsub("[^A-Za-z0-9]+", "_", tech), ".png")))
+      file  = file.path(fig_dir, paste0("forest_", oc, "_", tech_key, ".png")))
   }
 }
 

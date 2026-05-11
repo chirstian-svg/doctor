@@ -1,4 +1,5 @@
 library(dplyr)
+library(stringr)
 library(metafor)
 
 out_dir  <- file.path(dirname(getwd()), "outputs", "tables")

@@ -111,6 +111,7 @@ if (enbloc_available) {
 
     # Bar chart: en bloc vs piecemeal rate per study
     enbloc_long <- enbloc_dat |>
+      mutate(en_bloc_order = pct_en_bloc) |>
       tidyr::pivot_longer(
         cols = c(pct_en_bloc, pct_piecemeal),
         names_to  = "resection_type",
@@ -123,7 +124,7 @@ if (enbloc_available) {
 
     ggplot(enbloc_long,
            aes(x = percent,
-               y = reorder(study_label, pct_en_bloc, FUN = first),
+               y = reorder(study_label, en_bloc_order),
                fill = resection_type)) +
       geom_bar(stat = "identity", position = "stack") +
       scale_fill_manual(

@@ -124,6 +124,78 @@ for (oc in outcomes) {
       file = file.path(fig_dir, paste0("forest_", oc, "_", gsub("[^A-Za-z0-9]+", "_", tech), ".png"))
     )
   }
+
+  # Combined: overall + subgroups in one plot
+  techs_available <- sort(unique(df_oc$technique))
+  subgroup_dfs <- lapply(techs_available, function(tech) {
+    d <- df_oc |> filter(technique == tech)
+    if (nrow(d) < 2) return(NULL)
+    d |> mutate(subgroup = paste0(tech, " subgroup"))
+  })
+  subgroup_dfs <- Filter(Negate(is.null), subgroup_dfs)
+
+  if (length(subgroup_dfs) > 0) {
+    df_combined <- bind_rows(
+      df_oc |> mutate(subgroup = "Overall"),
+      bind_rows(subgroup_dfs)
+    ) |> mutate(subgroup = factor(subgroup, levels = c("Overall", paste0(techs_available, " subgroup"))))
+
+    outcome_pretty_combined <- dplyr::case_when(
+      oc == "delayed_bleeding"  ~ "Delayed Bleeding",
+      oc == "perforation"       ~ "Perforation",
+      oc == "post_esd_syndrome" ~ "Post-ESD Electrocoagulation Syndrome",
+      TRUE ~ oc
+    )
+
+    label_col <- if ("study_label" %in% names(df_combined)) "study_label" else "study_id"
+
+    df_combined |>
+      mutate(
+        or    = exp(yi),
+        lo    = exp(yi - 1.96 * sei),
+        hi    = exp(yi + 1.96 * sei),
+        label = if (label_col == "study_label") study_label else paste0("Study ", study_id)
+      ) |>
+      ggplot(aes(y = reorder(label, yi), x = or, color = technique, shape = technique)) +
+      geom_vline(xintercept = 1, linetype = "dashed", color = "grey50", linewidth = 0.6) +
+      geom_errorbar(aes(xmin = lo, xmax = hi), width = 0.2, linewidth = 0.6) +
+      geom_point(size = 3) +
+      scale_x_log10() +
+      scale_color_manual(
+        name = "Technique",
+        values = c("ESD" = "#E64B35", "EMR" = "#4DBBD5", "ESD+EMR" = "#00A087"),
+        drop = FALSE
+      ) +
+      scale_shape_manual(
+        name = "Technique",
+        values = c("ESD" = 16, "EMR" = 17, "ESD+EMR" = 15),
+        drop = FALSE
+      ) +
+      facet_wrap(~ subgroup, scales = "free_y", ncol = 1) +
+      labs(
+        title    = paste0("Clip vs No Clip — ", outcome_pretty_combined, " — Overall & Subgroups"),
+        subtitle = "Effect measure: Odds Ratio (log scale)",
+        x        = "Odds Ratio (log scale)  [OR < 1 favours Clip]",
+        y        = "Study (First Author, Year)",
+        caption  = "Points show OR; horizontal lines show 95% CI.\nDashed line at OR = 1 indicates no effect."
+      ) +
+      theme_minimal(base_size = 12) +
+      theme(
+        plot.title      = element_text(face = "bold", size = 13),
+        plot.subtitle   = element_text(size = 10, color = "grey40"),
+        plot.caption    = element_text(size = 8,  color = "grey50"),
+        legend.position = "bottom",
+        legend.title    = element_text(face = "bold"),
+        strip.text      = element_text(face = "bold", size = 11)
+      )
+
+    ggsave(
+      filename = file.path(fig_dir, paste0("forest_", oc, "_combined.png")),
+      width = 10,
+      height = max(8, nrow(df_combined) * 0.45 + 3),
+      dpi = 200
+    )
+  }
 }
 
 message("Bayesian meta-analysis models saved under outputs/tables/. Forest plots saved to outputs/figures/.")

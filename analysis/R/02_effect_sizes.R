@@ -35,6 +35,11 @@ make_es <- function(outcome_prefix) {
   dat |>
     transmute(
       study_id,
+      study_label = paste0(
+        str_to_title(str_trim(as.character(first_author_last_name))),
+        " ",
+        publication_year
+      ),
       technique,
       n_clip,
       n_no_clip,

@@ -43,17 +43,54 @@ fit_meta <- function(df, model_name, weakly_informative_tau = TRUE) {
 }
 
 plot_forest <- function(df, title, file) {
-  df |> 
-    mutate(or = exp(yi), lo = exp(yi - 1.96 * sei), hi = exp(yi + 1.96 * sei)) |>
-    ggplot(aes(y = reorder(paste0("Study ", study_id), yi), x = or)) +
-    geom_vline(xintercept = 1, linetype = "dashed", color = "grey60") +
-    geom_errorbarh(aes(xmin = lo, xmax = hi), height = 0.2) +
-    geom_point(size = 2) +
-    scale_x_log10() +
-    labs(title = title, x = "Odds Ratio (log scale)", y = NULL) +
-    theme_minimal(base_size = 12)
+  # Outcome label for legend
+  outcome_label <- unique(df$outcome)
+  outcome_pretty <- dplyr::case_when(
+    outcome_label == "delayed_bleeding"  ~ "Delayed Bleeding",
+    outcome_label == "perforation"       ~ "Perforation",
+    outcome_label == "post_esd_syndrome" ~ "Post-ESD Electrocoagulation Syndrome",
+    TRUE ~ outcome_label
+  )
 
-  ggsave(filename = file, width = 8, height = 5, dpi = 200)
+  df |>
+    mutate(
+      or  = exp(yi),
+      lo  = exp(yi - 1.96 * sei),
+      hi  = exp(yi + 1.96 * sei),
+      label = if ("study_label" %in% names(df)) study_label else paste0("Study ", study_id)
+    ) |>
+    ggplot(aes(y = reorder(label, yi), x = or, color = technique, shape = technique)) +
+    geom_vline(xintercept = 1, linetype = "dashed", color = "grey50", linewidth = 0.6) +
+    geom_errorbar(aes(xmin = lo, xmax = hi), width = 0.2, linewidth = 0.6) +
+    geom_point(size = 3) +
+    scale_x_log10() +
+    scale_color_manual(
+      name = "Technique",
+      values = c("ESD" = "#E64B35", "EMR" = "#4DBBD5", "ESD+EMR" = "#00A087"),
+      drop = FALSE
+    ) +
+    scale_shape_manual(
+      name = "Technique",
+      values = c("ESD" = 16, "EMR" = 17, "ESD+EMR" = 15),
+      drop = FALSE
+    ) +
+    labs(
+      title    = title,
+      subtitle = paste0("Outcome: ", outcome_pretty, "  |  Effect measure: Odds Ratio (log scale)"),
+      x        = "Odds Ratio (log scale)  [OR < 1 favours Clip]",
+      y        = "Study (First Author, Year)",
+      caption  = "Points show OR; horizontal lines show 95% CI.\nDashed line at OR = 1 indicates no effect."
+    ) +
+    theme_minimal(base_size = 12) +
+    theme(
+      plot.title    = element_text(face = "bold", size = 13),
+      plot.subtitle = element_text(size = 10, color = "grey40"),
+      plot.caption  = element_text(size = 8,  color = "grey50"),
+      legend.position = "bottom",
+      legend.title  = element_text(face = "bold")
+    )
+
+  ggsave(filename = file, width = 9, height = max(5, nrow(df) * 0.5 + 2), dpi = 200)
 }
 
 outcomes <- unique(es$outcome)
@@ -66,7 +103,7 @@ for (oc in outcomes) {
   fit_meta(df_oc, model_name = paste0(oc, "_overall"), weakly_informative_tau = TRUE)
   plot_forest(
     df_oc,
-    title = paste0("Forest plot (approx.) — ", oc, " — Overall"),
+    title = paste0("Clip vs No Clip — ", gsub("_", " ", tools::toTitleCase(oc)), " — All Studies (Overall)"),
     file = file.path(fig_dir, paste0("forest_", oc, "_overall.png"))
   )
 
@@ -83,7 +120,7 @@ for (oc in outcomes) {
     )
     plot_forest(
       df_t,
-      title = paste0("Forest plot (approx.) — ", oc, " — ", tech),
+      title = paste0("Clip vs No Clip — ", gsub("_", " ", tools::toTitleCase(oc)), " — ", tech, " Subgroup"),
       file = file.path(fig_dir, paste0("forest_", oc, "_", gsub("[^A-Za-z0-9]+", "_", tech), ".png"))
     )
   }

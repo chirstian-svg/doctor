@@ -16,14 +16,14 @@ require_cols <- function(cols) {
   }
 }
 
-compute_or <- function(events_t, n_t, events_c, n_c) {
+compute_rr <- function(events_t, n_t, events_c, n_c) {
   tmp <- tibble(
     ai = events_t,
     bi = n_t - events_t,
     ci = events_c,
     di = n_c - events_c
   )
-  out <- metafor::escalc(measure = "OR", ai = ai, bi = bi, ci = ci, di = di, data = tmp)
+  out <- metafor::escalc(measure = "RR", ai = ai, bi = bi, ci = ci, di = di, data = tmp)
   tibble(yi = out$yi, sei = sqrt(out$vi))
 }
 
@@ -57,7 +57,7 @@ make_es <- function(outcome_prefix) {
       across(c(events_clip, events_no_clip), ~ as.numeric(.x)),
       across(c(n_clip, n_no_clip), ~ as.numeric(.x)),
       # continuity correction will be handled by escalc internally if needed
-      tmp = list(compute_or(events_clip, n_clip, events_no_clip, n_no_clip)),
+      tmp = list(compute_rr(events_clip, n_clip, events_no_clip, n_no_clip)),
       yi = tmp$yi,
       sei = tmp$sei
     ) |>
@@ -71,8 +71,8 @@ es_post_esd <- make_es("post_esd_syndrome")
 
 es_all <- bind_rows(es_delayed, es_perforation, es_post_esd)
 
-saveRDS(es_all, file.path(out_dir, "effect_sizes_or.rds"))
-write.csv(es_all, file.path(out_dir, "effect_sizes_or.csv"), row.names = FALSE)
+saveRDS(es_all, file.path(out_dir, "effect_sizes_rr.rds"))
+write.csv(es_all, file.path(out_dir, "effect_sizes_rr.csv"), row.names = FALSE)
 
-message("Saved effect sizes to outputs/tables/effect_sizes_or.{rds,csv}")
+message("Saved effect sizes (RR) to outputs/tables/effect_sizes_rr.{rds,csv}")
 

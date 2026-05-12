@@ -5,7 +5,7 @@ library(brms)
 
 tbl_dir <- file.path(dirname(getwd()), "outputs", "tables")
 fig_dir <- file.path(dirname(getwd()), "outputs", "figures")
-es  <- readRDS(file.path(tbl_dir, "effect_sizes_or.rds"))
+es  <- readRDS(file.path(tbl_dir, "effect_sizes_rr.rds"))
 dat <- readRDS(file.path(tbl_dir, "clean_data.rds"))
 
 # Join moderators

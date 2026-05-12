@@ -5,7 +5,7 @@ library(posterior)
 
 tbl_dir <- file.path(dirname(getwd()), "outputs", "tables")
 fig_dir <- file.path(dirname(getwd()), "outputs", "figures")
-es <- readRDS(file.path(tbl_dir, "effect_sizes_or.rds"))
+es <- readRDS(file.path(tbl_dir, "effect_sizes_rr.rds"))
 
 # ESD+EMR study counts once in overall (not duplicated)
 es <- es |> mutate(overall_inclusion = TRUE)

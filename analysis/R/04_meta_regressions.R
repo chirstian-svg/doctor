@@ -74,10 +74,10 @@ bubble <- function(d, x, xlab, title, file) {
   d <- d |> mutate(weight = 1 / (sei^2))
   p <- ggplot(d, aes(x = .data[[x]], y = yi, size = weight, color = technique)) +
     geom_hline(yintercept = 0, linetype = "dashed", color = "grey50", linewidth = 0.6) +
-    geom_smooth(aes(weight = weight), method = "lm", se = TRUE,
+    geom_smooth(aes(x = .data[[x]], y = yi, weight = weight),
+                method = "lm", se = TRUE,
                 color = "grey30", fill = "grey80", alpha = 0.3,
-                linewidth = 0.8, inherit.aes = FALSE,
-                mapping = aes(x = .data[[x]], y = yi, weight = weight)) +
+                linewidth = 0.8, inherit.aes = FALSE) +
     geom_point(alpha = 0.85, shape = 16) +
     scale_size_continuous(
       name   = "Precision (1/SE\u00b2)",

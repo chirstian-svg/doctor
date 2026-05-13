@@ -36,173 +36,150 @@ out <- dat |>
     risk_no_clip   = calc_risks(
                        suppressWarnings(as.numeric(delayed_bleeding_no_clip)),
                        suppressWarnings(as.numeric(n_no_clip))),
-    # ARR: positive = clipping reduces risk
-    arr            = risk_no_clip - risk_clip,
-    rr             = risk_clip / risk_no_clip
+    arr = risk_no_clip - risk_clip,
+    rr  = risk_clip / risk_no_clip
   )
-
-# ── ARR plot (study-level, with author/year labels) ───────────────────────────
-p_arr <- out |>
-  filter(!is.na(arr)) |>
-  ggplot(aes(x = arr, y = reorder(study_label, arr),
-             color = technique, shape = technique)) +
-  geom_vline(xintercept = 0, linetype = "dashed", color = "grey50", linewidth = 0.6) +
-  geom_point(size = 3) +
-  scale_color_manual(
-    name   = "Technique",
-    values = c("ESD" = "#E64B35", "EMR" = "#4DBBD5", "ESD+EMR" = "#00A087"),
-    drop   = FALSE
-  ) +
-  scale_shape_manual(
-    name   = "Technique",
-    values = c("ESD" = 16, "EMR" = 17, "ESD+EMR" = 15),
-    drop   = FALSE
-  ) +
-  labs(
-    title    = "Absolute Risk Reduction (ARR) \u2014 Delayed Bleeding",
-    subtitle = "ARR = Risk (No Clip) \u2212 Risk (Clip)  |  Positive values favour Clip",
-    x        = "Absolute Risk Reduction (ARR)",
-    y        = "Study (First Author, Year)",
-    caption  = "Dashed line at ARR = 0 indicates no difference.\nPositive ARR = clipping reduces bleeding risk."
-  ) +
-  theme_minimal(base_size = 12) +
-  theme(
-    plot.title      = element_text(face = "bold", size = 13),
-    plot.subtitle   = element_text(size = 10, color = "grey40"),
-    plot.caption    = element_text(size = 8,  color = "grey50"),
-    legend.position = "bottom",
-    legend.title    = element_text(face = "bold")
-  )
-
-ggsave(file.path(fig_dir, "arr_delayed_bleeding.png"), p_arr,
-       width = 9,
-       height = max(5, nrow(out |> filter(!is.na(arr))) * 0.5 + 2),
-       dpi = 200)
-message("ARR plot saved.")
 
 # ── Pooled NNT from Bayesian posterior ───────────────────────────────────────
-# NNT = 1 / ARR_pooled
-# ARR_pooled = p0 - p_clip
-# p_clip = (OR * p0) / (1 - p0 + OR * p0)   [standard OR-to-risk conversion]
-# p0 = baseline risk = median control-arm risk across studies
+# For RCT meta-analysis: use RR directly (not OR-to-risk conversion)
+# p_clip = RR * p0
+# ARR = p0 - p_clip = p0 * (1 - RR)
+# NNT = 1 / ARR
 
-compute_nnt <- function(fit, p0) {
+compute_nnt_rr <- function(fit, p0) {
   draws     <- as_draws_df(fit)$b_Intercept
-  or_draws  <- exp(draws)
-  p_clip    <- (or_draws * p0) / (1 - p0 + or_draws * p0)
-  arr_draws <- p0 - p_clip
-  nnt_draws <- 1 / arr_draws
+  rr_draws  <- exp(draws)                  # posterior RR draws
+  arr_draws <- p0 * (1 - rr_draws)         # ARR = p0 * (1 - RR)
+  nnt_draws <- 1 / arr_draws               # NNT = 1 / ARR
   list(
-    p0         = p0,
-    OR_med     = round(median(or_draws), 2),
-    OR_lo      = round(quantile(or_draws, 0.025), 2),
-    OR_hi      = round(quantile(or_draws, 0.975), 2),
-    ARR_med    = round(median(arr_draws), 4),
-    ARR_lo     = round(quantile(arr_draws, 0.025), 4),
-    ARR_hi     = round(quantile(arr_draws, 0.975), 4),
-    NNT_med    = round(median(nnt_draws), 0),
-    NNT_lo     = round(quantile(nnt_draws, 0.025), 0),
-    NNT_hi     = round(quantile(nnt_draws, 0.975), 0)
+    p0        = p0,
+    p0_pct    = round(p0 * 100, 2),
+    RR_med    = round(median(rr_draws), 3),
+    RR_lo     = round(quantile(rr_draws, 0.025), 3),
+    RR_hi     = round(quantile(rr_draws, 0.975), 3),
+    ARR_med   = round(median(arr_draws), 4),
+    ARR_pct   = round(median(arr_draws) * 100, 2),
+    NNT_med   = abs(round(median(nnt_draws), 0)),
+    NNT_lo    = abs(round(quantile(nnt_draws, 0.025), 0)),
+    NNT_hi    = abs(round(quantile(nnt_draws, 0.975), 0)),
+    # clip arm predicted risk
+    p_clip_med = round(median(rr_draws * p0) * 100, 2)
   )
 }
 
-# Groups to compute NNT for
 groups <- list(
-  list(name = "Overall",      file = "brms_delayed_bleeding_overall.rds",  tech = NULL),
-  list(name = "ESD subgroup", file = "brms_delayed_bleeding_ESD.rds",      tech = "ESD"),
-  list(name = "EMR subgroup", file = "brms_delayed_bleeding_EMR.rds",      tech = "EMR")
+  list(name = "Overall", file = "brms_delayed_bleeding_overall.rds", tech = NULL),
+  list(name = "ESD",     file = "brms_delayed_bleeding_ESD.rds",     tech = "ESD"),
+  list(name = "EMR",     file = "brms_delayed_bleeding_EMR.rds",     tech = "EMR")
 )
 
-nnt_rows <- list()
+bar_rows  <- list()
+nnt_rows  <- list()
 
 for (g in groups) {
   mfile <- file.path(tbl_dir, g$file)
-  if (!file.exists(mfile)) {
-    message("Model file not found, skipping: ", g$file)
-    next
-  }
+  if (!file.exists(mfile)) { message("Skipping (not found): ", g$file); next }
   fit <- readRDS(mfile)
 
-  # Baseline risk: median control-arm risk for this group
   if (is.null(g$tech)) {
-    p0 <- median(out$risk_no_clip, na.rm = TRUE)
+    p0 <- mean(out$risk_no_clip, na.rm = TRUE)   # pooled baseline = mean across all studies
   } else {
     p0 <- out |> filter(technique == g$tech) |>
-      summarise(m = median(risk_no_clip, na.rm = TRUE)) |> pull(m)
-    if (is.na(p0) || length(p0) == 0) p0 <- median(out$risk_no_clip, na.rm = TRUE)
+      summarise(m = mean(risk_no_clip, na.rm = TRUE)) |> pull(m)
+    if (is.na(p0) || length(p0) == 0) p0 <- mean(out$risk_no_clip, na.rm = TRUE)
   }
 
-  res <- compute_nnt(fit, p0)
+  res <- compute_nnt_rr(fit, p0)
+
+  # rows for grouped bar chart
+  bar_rows[[paste0(g$name, "_noclip")]] <- tibble(
+    group = g$name, arm = "No Clipping",
+    risk_pct = res$p0_pct,
+    arr_pct  = res$ARR_pct,
+    nnt      = res$NNT_med
+  )
+  bar_rows[[paste0(g$name, "_clip")]] <- tibble(
+    group = g$name, arm = "Clipping",
+    risk_pct = res$p_clip_med,
+    arr_pct  = res$ARR_pct,
+    nnt      = res$NNT_med
+  )
 
   nnt_rows[[g$name]] <- tibble(
-    Group            = g$name,
-    Baseline_Risk    = round(res$p0, 4),
-    Pooled_OR        = paste0(res$OR_med,  " (", res$OR_lo,  "\u2013", res$OR_hi,  ")"),
-    ARR              = paste0(res$ARR_med, " (", res$ARR_lo, "\u2013", res$ARR_hi, ")"),
-    NNT              = res$NNT_med,
-    NNT_95CrI        = paste0(res$NNT_lo, "\u2013", res$NNT_hi),
-    NNT_med_raw      = res$NNT_med,
-    NNT_lo_raw       = res$NNT_lo,
-    NNT_hi_raw       = res$NNT_hi
+    Group         = g$name,
+    Baseline_Risk = paste0(res$p0_pct, "%"),
+    Pooled_RR     = paste0(res$RR_med, " (", res$RR_lo, "\u2013", res$RR_hi, ")"),
+    ARR_pct       = paste0(res$ARR_pct, "%"),
+    NNT           = res$NNT_med,
+    NNT_95CrI     = paste0(res$NNT_lo, "\u2013", res$NNT_hi)
   )
 }
 
-if (length(nnt_rows) > 0) {
-  nnt_table <- bind_rows(nnt_rows)
+# ── Grouped bar chart: ARR of Prophylactic Clipping (matches client image) ───
+if (length(bar_rows) > 0) {
+  bar_df <- bind_rows(bar_rows) |>
+    mutate(
+      group = factor(group, levels = c("Overall", "ESD", "EMR")),
+      arm   = factor(arm,   levels = c("No Clipping", "Clipping"))
+    )
 
-  # Save table
-  write.csv(
-    nnt_table |> select(-NNT_med_raw, -NNT_lo_raw, -NNT_hi_raw),
-    file.path(tbl_dir, "pooled_NNT_summary.csv"),
-    row.names = FALSE
-  )
+  # annotation: one label per group (above the No Clipping bar)
+  annot_df <- bar_df |>
+    filter(arm == "No Clipping") |>
+    mutate(label = paste0("ARR ", sprintf("%.2f", arr_pct), "%\nNNT = ", nnt))
 
-  # ── NNT summary plot ────────────────────────────────────────────────────────
-  p_nnt <- nnt_table |>
-    mutate(Group = factor(Group, levels = rev(Group))) |>
-    ggplot(aes(y = Group, x = NNT_med_raw)) +
-    geom_vline(xintercept = 0, linetype = "dashed", color = "grey50", linewidth = 0.6) +
-    geom_errorbar(
-      aes(xmin = NNT_lo_raw, xmax = NNT_hi_raw),
-      width = 0.25, linewidth = 0.9, color = "#4DBBD5"
-    ) +
-    geom_point(size = 5, color = "#E64B35", shape = 18) +
+  p_arr_bar <- ggplot(bar_df, aes(x = group, y = risk_pct, fill = arm)) +
+    geom_col(position = position_dodge(width = 0.6), width = 0.55) +
     geom_text(
-      aes(label = paste0("NNT = ", NNT_med_raw, "\n(", NNT_lo_raw, "\u2013", NNT_hi_raw, ")")),
-      hjust = -0.15, size = 3.2, color = "grey20"
+      data = annot_df,
+      aes(x = group, y = risk_pct + 0.3, label = label),
+      inherit.aes = FALSE,
+      size = 3.2, vjust = 0, fontface = "bold", color = "grey20"
     ) +
-    scale_x_continuous(expand = expansion(mult = c(0.05, 0.35))) +
+    scale_fill_manual(
+      name   = NULL,
+      values = c("No Clipping" = "#4472C4", "Clipping" = "#ED7D31")
+    ) +
+    scale_y_continuous(
+      expand = expansion(mult = c(0, 0.25)),
+      labels = function(x) paste0(x, "%")
+    ) +
     labs(
-      title    = "Pooled Number Needed to Treat (NNT) \u2014 Delayed Bleeding",
-      subtitle = paste0(
-        "NNT = 1 / ARR  |  ARR derived from Bayesian posterior pooled OR\n",
-        "Baseline risk = median control-arm (No Clip) event rate per group"
-      ),
-      x        = "NNT  (positive = benefit from Clip)",
-      y        = NULL,
+      title    = "Absolute Risk Reduction of Prophylactic Clipping",
+      subtitle = "Delayed Bleeding (%) by resection technique",
+      x        = "Resection Technique",
+      y        = "Delayed Bleeding (%)",
       caption  = paste0(
-        "NNT: number of patients who need prophylactic clipping to prevent 1 delayed bleeding event.\n",
-        "Point = posterior median NNT; bars = 95% credible interval.\n",
-        "Negative NNT (NNH) would indicate clipping increases risk."
+        "Bar heights = pooled event rate derived from Bayesian posterior RR.\n",
+        "ARR = Absolute Risk Reduction; NNT = Number Needed to Treat.\n",
+        "Baseline risk = mean control-arm (No Clipping) event rate per group."
       )
     ) +
     theme_minimal(base_size = 12) +
     theme(
-      plot.title    = element_text(face = "bold", size = 13),
-      plot.subtitle = element_text(size = 9, color = "grey40"),
-      plot.caption  = element_text(size = 8, color = "grey50", hjust = 0),
-      axis.text.y   = element_text(face = "bold", size = 11)
+      plot.title      = element_text(face = "bold", size = 13),
+      plot.subtitle   = element_text(size = 10, color = "grey40"),
+      plot.caption    = element_text(size = 8,  color = "grey50", hjust = 0),
+      legend.position = "top",
+      legend.text     = element_text(size = 11),
+      axis.text.x     = element_text(size = 11, face = "bold"),
+      panel.grid.major.x = element_blank()
     )
 
-  ggsave(file.path(fig_dir, "nnt_pooled_delayed_bleeding.png"), p_nnt,
-         width = 10, height = max(4, nrow(nnt_table) * 1.2 + 2), dpi = 200)
-
-  message("NNT plot saved.")
-  message("NNT summary:")
-  print(nnt_table |> select(Group, Baseline_Risk, Pooled_OR, NNT, NNT_95CrI))
+  ggsave(file.path(fig_dir, "arr_nnt_bar_delayed_bleeding.png"), p_arr_bar,
+         width = 7, height = 6, dpi = 200)
+  message("ARR/NNT bar chart saved.")
 }
 
-# Save study-level table
+# ── Save NNT summary table ────────────────────────────────────────────────────
+if (length(nnt_rows) > 0) {
+  nnt_table <- bind_rows(nnt_rows)
+  write.csv(nnt_table, file.path(tbl_dir, "pooled_NNT_summary.csv"), row.names = FALSE)
+  message("NNT summary table saved.")
+  print(nnt_table)
+}
+
+# ── Save study-level ARR table ────────────────────────────────────────────────
 write.csv(out, file.path(tbl_dir, "study_level_ARR_delayed_bleeding.csv"), row.names = FALSE)
 message("Study-level ARR table saved.")
 message("Done.")

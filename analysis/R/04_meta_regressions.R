@@ -69,21 +69,56 @@ fit_size <- brm(
   file = file.path(tbl_dir, "brms_meta_reg_size_antiplatelet")
 )
 
-# Bubble plots (approximate): yi vs moderator with size by precision
-bubble <- function(d, x, xlab, file) {
+# Bubble plots: yi vs moderator with regression line and credible band
+bubble <- function(d, x, xlab, title, file) {
   d <- d |> mutate(weight = 1 / (sei^2))
-  ggplot(d, aes(x = .data[[x]], y = yi, size = weight, color = technique)) +
-    geom_hline(yintercept = 0, linetype = "dashed", color = "grey60") +
-    geom_point(alpha = 0.75) +
-    scale_size_continuous(range = c(2, 10)) +
-    labs(x = xlab, y = "log(OR) for delayed bleeding", title = "Bubble plot (study-level)") +
-    theme_minimal(base_size = 12)
-  ggsave(file, width = 8, height = 5, dpi = 200)
+  p <- ggplot(d, aes(x = .data[[x]], y = yi, size = weight, color = technique)) +
+    geom_hline(yintercept = 0, linetype = "dashed", color = "grey50", linewidth = 0.6) +
+    geom_smooth(aes(weight = weight), method = "lm", se = TRUE,
+                color = "grey30", fill = "grey80", alpha = 0.3,
+                linewidth = 0.8, inherit.aes = FALSE,
+                mapping = aes(x = .data[[x]], y = yi, weight = weight)) +
+    geom_point(alpha = 0.85, shape = 16) +
+    scale_size_continuous(
+      name   = "Precision (1/SE\u00b2)",
+      range  = c(2, 10)
+    ) +
+    scale_color_manual(
+      name   = "Technique",
+      values = c("ESD" = "#E64B35", "EMR" = "#4DBBD5", "ESD+EMR" = "#00A087")
+    ) +
+    labs(
+      title    = title,
+      subtitle = "Outcome: Delayed Bleeding  |  Effect measure: log(RR)",
+      x        = xlab,
+      y        = "log(RR) for delayed bleeding  [< 0 favours Clip]",
+      caption  = "Bubble size proportional to study precision (1/SE\u00b2).\nLine = weighted regression; shaded band = 95% CI."
+    ) +
+    theme_minimal(base_size = 12) +
+    theme(
+      plot.title      = element_text(face = "bold", size = 13),
+      plot.subtitle   = element_text(size = 10, color = "grey40"),
+      plot.caption    = element_text(size = 8,  color = "grey50", hjust = 0),
+      legend.position = "bottom",
+      legend.title    = element_text(face = "bold")
+    )
+  ggsave(file, plot = p, width = 8, height = 6, dpi = 200)
 }
 
-bubble(df_tech, "technique_code", "Technique (1=ESD, 2=EMR)", file.path(fig_dir, "bubble_technique.png"))
-bubble(df_size |> filter(!is.na(avg_size)), "avg_size", "Average polyp size (mm)", file.path(fig_dir, "bubble_size.png"))
-bubble(df_size |> filter(!is.na(antiplatelet_rate)), "antiplatelet_rate", "Antiplatelet rate (clip arm)", file.path(fig_dir, "bubble_antiplatelet_rate.png"))
+bubble(df_tech, "technique_code",
+       xlab  = "Technique (1 = ESD, 2 = EMR)",
+       title = "Meta-regression of Clipping Effect by Technique",
+       file  = file.path(fig_dir, "bubble_technique.png"))
+
+bubble(df_size |> filter(!is.na(avg_size)), "avg_size",
+       xlab  = "Average polyp size (mm)",
+       title = "Meta-regression of Clipping Effect by Polyp Size",
+       file  = file.path(fig_dir, "bubble_size.png"))
+
+bubble(df_size |> filter(!is.na(antiplatelet_rate)), "antiplatelet_rate",
+       xlab  = "Antiplatelet use rate (clip arm)",
+       title = "Meta-regression of Clipping Effect by Antiplatelet Use",
+       file  = file.path(fig_dir, "bubble_antiplatelet_rate.png"))
 
 # ---- Piecemeal vs En Bloc analysis ----
 # Pull en bloc / piecemeal columns from clean data
@@ -146,6 +181,7 @@ if (enbloc_available) {
         plot.caption    = element_text(size = 8,  color = "grey50"),
         legend.position = "bottom",
         legend.title    = element_text(face = "bold"),
+        legend.text     = element_text(size = 11),
         strip.text      = element_text(face = "bold", size = 11)
       )
 

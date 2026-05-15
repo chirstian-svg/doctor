@@ -1,8 +1,6 @@
 library(dplyr)
 library(ggplot2)
 library(stringr)
-library(brms)
-library(posterior)
 
 tbl_dir <- file.path(dirname(getwd()), "outputs", "tables")
 fig_dir <- file.path(dirname(getwd()), "outputs", "figures")
@@ -40,78 +38,60 @@ out <- dat |>
     rr  = risk_clip / risk_no_clip
   )
 
-# ── Pooled NNT from Bayesian posterior ───────────────────────────────────────
-# For RCT meta-analysis: use RR directly (not OR-to-risk conversion)
-# p_clip = RR * p0
-# ARR = p0 - p_clip = p0 * (1 - RR)
-# NNT = 1 / ARR
-
-compute_nnt_rr <- function(fit, p0) {
-  draws     <- as_draws_df(fit)$b_Intercept
-  rr_draws  <- exp(draws)                  # posterior RR draws
-  arr_draws <- p0 * (1 - rr_draws)         # ARR = p0 * (1 - RR)
-  nnt_draws <- 1 / arr_draws               # NNT = 1 / ARR
-  list(
-    p0        = p0,
-    p0_pct    = round(p0 * 100, 2),
-    RR_med    = round(median(rr_draws), 3),
-    RR_lo     = round(quantile(rr_draws, 0.025), 3),
-    RR_hi     = round(quantile(rr_draws, 0.975), 3),
-    ARR_med   = round(median(arr_draws), 4),
-    ARR_pct   = round(median(arr_draws) * 100, 2),
-    NNT_med   = abs(round(median(nnt_draws), 0)),
-    NNT_lo    = abs(round(quantile(nnt_draws, 0.025), 0)),
-    NNT_hi    = abs(round(quantile(nnt_draws, 0.975), 0)),
-    # clip arm predicted risk
-    p_clip_med = round(median(rr_draws * p0) * 100, 2)
-  )
-}
-
 groups <- list(
-  list(name = "Overall", file = "brms_delayed_bleeding_overall.rds", tech = NULL),
-  list(name = "ESD",     file = "brms_delayed_bleeding_ESD.rds",     tech = "ESD"),
-  list(name = "EMR",     file = "brms_delayed_bleeding_EMR.rds",     tech = "EMR")
+  list(name = "Overall", tech = NULL),
+  list(name = "ESD",     tech = "ESD"),
+  list(name = "EMR",     tech = "EMR")
 )
 
 bar_rows  <- list()
 nnt_rows  <- list()
 
 for (g in groups) {
-  mfile <- file.path(tbl_dir, g$file)
-  if (!file.exists(mfile)) { message("Skipping (not found): ", g$file); next }
-  fit <- readRDS(mfile)
-
+  # Filter to relevant studies
   if (is.null(g$tech)) {
-    p0 <- mean(out$risk_no_clip, na.rm = TRUE)   # pooled baseline = mean across all studies
+    sub <- out |> filter(!is.na(risk_no_clip), !is.na(risk_clip))
   } else {
-    p0 <- out |> filter(technique == g$tech) |>
-      summarise(m = mean(risk_no_clip, na.rm = TRUE)) |> pull(m)
-    if (is.na(p0) || length(p0) == 0) p0 <- mean(out$risk_no_clip, na.rm = TRUE)
+    sub <- out |> filter(technique == g$tech, !is.na(risk_no_clip), !is.na(risk_clip))
   }
+  if (nrow(sub) == 0) next
 
-  res <- compute_nnt_rr(fit, p0)
+  # Pooled risks: sum events / sum patients (same method client used)
+  total_events_noclip <- sum(sub$events_no_clip, na.rm = TRUE)
+  total_n_noclip      <- sum(sub$n_no_clip,      na.rm = TRUE)
+  total_events_clip   <- sum(sub$events_clip,    na.rm = TRUE)
+  total_n_clip        <- sum(sub$n_clip,          na.rm = TRUE)
 
-  # rows for grouped bar chart
+  p_noclip <- total_events_noclip / total_n_noclip
+  p_clip   <- total_events_clip   / total_n_clip
+  arr      <- p_noclip - p_clip
+  nnt      <- round(1 / arr, 0)
+
   bar_rows[[paste0(g$name, "_noclip")]] <- tibble(
-    group = g$name, arm = "No Clipping",
-    risk_pct = res$p0_pct,
-    arr_pct  = res$ARR_pct,
-    nnt      = res$NNT_med
+    group    = g$name,
+    arm      = "No Clipping",
+    risk_pct = round(p_noclip * 100, 2),
+    arr_pct  = round(arr * 100, 2),
+    nnt      = nnt
   )
   bar_rows[[paste0(g$name, "_clip")]] <- tibble(
-    group = g$name, arm = "Clipping",
-    risk_pct = res$p_clip_med,
-    arr_pct  = res$ARR_pct,
-    nnt      = res$NNT_med
+    group    = g$name,
+    arm      = "Clipping",
+    risk_pct = round(p_clip * 100, 2),
+    arr_pct  = round(arr * 100, 2),
+    nnt      = nnt
   )
 
   nnt_rows[[g$name]] <- tibble(
-    Group         = g$name,
-    Baseline_Risk = paste0(res$p0_pct, "%"),
-    Pooled_RR     = paste0(res$RR_med, " (", res$RR_lo, "\u2013", res$RR_hi, ")"),
-    ARR_pct       = paste0(res$ARR_pct, "%"),
-    NNT           = res$NNT_med,
-    NNT_95CrI     = paste0(res$NNT_lo, "\u2013", res$NNT_hi)
+    Group            = g$name,
+    Events_NoClip    = total_events_noclip,
+    N_NoClip         = total_n_noclip,
+    Risk_NoClip_pct  = round(p_noclip * 100, 2),
+    Events_Clip      = total_events_clip,
+    N_Clip           = total_n_clip,
+    Risk_Clip_pct    = round(p_clip * 100, 2),
+    ARR_pct          = round(arr * 100, 2),
+    NNT              = nnt
   )
 }
 

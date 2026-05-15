@@ -1,4 +1,4 @@
-"study_id","study_label","technique","n_clip","en_bloc","piecemeal","total_resections","pct_en_bloc","pct_piecemeal"
-1,"Study 1","ESD",110,104,6,110,94.5454545454545,5.45454545454545
-2,"Study 2","ESD",150,141,0,141,100,0
-10,"Study 10","EMR",177,34,145,179,18.9944134078212,81.0055865921788
+"study_id","study_label","technique","en_bloc","piecemeal","total_resections","pct_en_bloc","pct_piecemeal"
+1,"Lee 2019","ESD",104,6,110,94.5454545454545,5.45454545454545
+2,"Miyakawa 2025","ESD",141,0,141,100,0
+10,"Kemper 2025","EMR",34,145,179,18.9944134078212,81.0055865921788
